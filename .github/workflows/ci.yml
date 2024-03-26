@@ -55,6 +55,11 @@ jobs:
       - name: Build mage
         run: docker build . --file Dockerfile --tag $IMAGE_NAME
 
+      - name: Set DOCKER_CONFIG environment variable
+        run: |
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/.docker" >> $GITHUB_ENV
+          mkdir -p $RUNNER_TEMP/.docker
+
       - name: Log into Docker Hub registry
         run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
 
