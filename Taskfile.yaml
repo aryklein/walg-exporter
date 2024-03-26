@@ -1,0 +1,36 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the binary
+    env:
+      GO_FLAGS: -a -installsuffix cgo
+      BINARY_NAME: main
+      CGO_ENABLED: 0
+      GOOS: linux
+    cmds:
+      - go build ${GO_FLAGS} -o ${BINARY_NAME} -v main.go
+
+  container:
+    desc: Build the docker image
+    env:
+      CONTAINER_NAME: walg-exporter
+      REGISTRY: docker.io
+      NAMESPACE: aryklein
+    cmds:
+      - podman build . --file Dockerfile --tag ${REGISTRY}/${NAMESPACE}/${CONTAINER_NAME}\:$(cat VERSION)
+      - podman tag ${REGISTRY}/${NAMESPACE}/${CONTAINER_NAME}:$(cat VERSION) ${REGISTRY}/${NAMESPACE}/${CONTAINER_NAME}:latest
+      - podman push ${REGISTRY}/${NAMESPACE}/${CONTAINER_NAME}:$(cat VERSION)
+      - podman push ${REGISTRY}/${NAMESPACE}/${CONTAINER_NAME}:latest
+
+  release:
+    desc: Tag the git repository
+    cmds:
+      - git tag -a v$(cat VERSION) -m "Release v$(cat VERSION)"
+      - git push origin --tags
+
+  default:
+    desc: Run the default task
+    cmds:
+      - task: build
+      - task: container

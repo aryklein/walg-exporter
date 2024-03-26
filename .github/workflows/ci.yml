@@ -1,0 +1,86 @@
+name: Compile and push the container image
+
+on:
+  push:
+    # Publish `main` as Docker `latest` image.
+    branches:
+      - main
+
+    # Publish `v1.2.3` tags as releases.
+    tags:
+      - v*
+
+  # Run formating test for PRs to main branch.
+  pull_request:
+    branches:
+      - main
+
+env:
+  IMAGE_NAME: walg-exporter
+  REGISTRY: docker.io
+  PROJECT: aryklein
+
+jobs:
+  # Ckeck code formatting
+  gofmt:
+    name: Check Go Formatting
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.22' # Specify the Go version
+
+    - name: Check formatting
+      run: |
+        unformatted=$(gofmt -l .)
+        if [ -n "$unformatted" ]; then
+          echo "Unformatted files detected:"
+          echo "$unformatted"
+          exit 1
+        fi
+
+  push:
+    # Ensure gofmt job passes before pushing image.
+    needs: gofmt
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build mage
+        run: docker build . --file Dockerfile --tag $IMAGE_NAME
+
+      - name: Log into Docker Hub registry
+        run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
+
+      - name: Push image
+        run: |
+          IMAGE_ID=$REGISTRY/$PROJECT/$IMAGE_NAME
+
+          # Strip git ref prefix from version
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+
+          # Strip "v" prefix from tag name
+          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+
+          # Use Docker `latest` tag convention
+          [ "$VERSION" == "main" ] && VERSION=latest
+
+          # verbose
+          echo IMAGE_ID=$IMAGE_ID
+          echo VERSION=$VERSION
+
+          # tag the built image and push it to Docker Hub
+          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
+          docker push $IMAGE_ID:$VERSION
+
+      - name: Logout from registry.example.com
+        run: docker logout $REGISTRY
+
+      - name: Remove DOCKER_CONFIG environment variable
+        run: rm -rf $RUNNER_TEMP/.docker
